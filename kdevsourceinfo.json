@@ -1,0 +1,25 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Niko Sams",
+                "Name[x-test]": "xxNiko Samsxx"
+            }
+        ],
+        "Description": "TODO: Source Info Description.",
+        "Description": "xxTODO: Source Info Description.xx",
+        "Icon": "code-context",
+        "Id": "kdevsourceinfo",
+        "License": "GPL",
+        "Name": "Source Info",
+        "Name[x-test]": "xxSource Infoxx",
+        "ServiceTypes": [
+            "KDevelop/Plugin"
+        ]
+    },
+    "X-KDevelop-Category": "Global",
+    "X-KDevelop-Interfaces": [
+        "org.kdevelop.ISourceInfoPlugin"
+    ],
+    "X-KDevelop-Mode": "NoGUI"
+}
