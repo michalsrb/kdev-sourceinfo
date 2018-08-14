@@ -124,18 +124,16 @@ void SourceInfoInlineNoteProvider::walkContext(KDevelop::DUContext* ctx, KDevelo
 
             const CursorInRevision &pos = declaration->range().start;
 
-            // XXX: Ugly, slow and unreliable way to determine if the declaration is C++ "auto"
-            if (pos.column < 5) continue;
-            const auto range = KTextEditor::Range(pos.line, pos.column - 5, pos.line, pos.column);
-            if (m_doc->text(range) != "auto ") continue;
+            // Only show this for implicitly typed declarations
+            if (declaration->isExplicitlyTyped()) continue;
 
             const AbstractType::Ptr abstractType = declaration->abstractType();
             if (!abstractType) continue;
 
             QString text = "= " + abstractType->toString();
 
-            KTextEditor::InlineNote *note = new GenericTextNote(range.end().column() - 1, text, QColor(0x9090b0), QBrush(QColor(0xf5f5f5)), true, 4.0, 6.0);
-            m_notes[range.end().line()].push_back(note);
+            KTextEditor::InlineNote *note = new GenericTextNote(pos.column, text, QColor(0x9090b0), QBrush(QColor(0xf5f5f5)), true, 4.0, 6.0);
+            m_notes[pos.line].push_back(note);
         }
     }
 
