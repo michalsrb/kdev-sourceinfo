@@ -1,15 +1,13 @@
-This is experimental plugin for KDevelop that shows information about source code inline with the code.
+This is experimental plugin for KDevelop that shows information about source code inline with the code. It is very hacky at the moment because not all information that it needs are yet available in the KDevelop DUchain, so it parses on its own in dirty ways.
 
-It currently needs patched KDevelop and patched ktexteditor. It is very hacky at the moment because not all information that it needs are yet available in the KDevelop DUchain, so it parses on its own in dirty ways.
+Required KDevelop version: Current git master - will be probably released as 5.2.5. Required patches:
 
-Required KDevelop patches:
+ * https://cgit.kde.org/kdevelop.git/commit/?id=6b146066a4916a7703a55476945cf39137aebd77
+ * https://cgit.kde.org/kdevelop.git/commit/?id=c0e3d5248aa6983d16469ae563813d38378d1023
 
- * https://phabricator.kde.org/R32:248e34d1ece07b61298d95682de282f60d4ea11d
- * https://phabricator.kde.org/D14838
-
-Required ktexteditor patches:
+Required KDE Frameworks version: Current git master - will be released as 5.50.0. Required patches:
  
- * https://phabricator.kde.org/D12662 This will be probably replaced by alternative version.
+ * https://cgit.kde.org/ktexteditor.git/commit/?id=4ea5fee0afe5c76bbee07563c23ede808aa059de
 
 Features supported at the moment:
 
