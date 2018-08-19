@@ -101,16 +101,9 @@ void SourceInfoPlugin::documentOpened(KDevelop::IDocument* document)
     if (document->isTextDocument()) {
         auto textDocument = document->textDocument();
 
-        KTextEditor::InlineNoteInterface* iface = qobject_cast<KTextEditor::InlineNoteInterface*>((QObject* /*xxx?*/)textDocument);
-
-        if (!iface) {
-            return;
-        }
-
-        auto *provider = new SourceInfoInlineNoteProvider(m_config, document);
+        auto *provider = new SourceInfoInlineNoteProvider(m_config, textDocument);
 
         m_documentToProviderMap.insert(textDocument, provider);
-        iface->registerInlineNoteProvider(provider);
     }
 }
 
@@ -119,15 +112,8 @@ void SourceInfoPlugin::documentClosed(KDevelop::IDocument* document)
     if (document->isTextDocument()) {
         auto textDocument = document->textDocument();
 
-        KTextEditor::InlineNoteInterface* iface = qobject_cast<KTextEditor::InlineNoteInterface*>((QObject* /*xxx?*/)textDocument);
-
-        if (!iface) {
-            return;
-        }
-
         auto provider = m_documentToProviderMap.find(textDocument);
         if (provider != m_documentToProviderMap.end()) {
-            iface->unregisterInlineNoteProvider(*provider);
             delete *provider;
             m_documentToProviderMap.erase(provider);
         }

@@ -32,6 +32,7 @@
 
 #include <kdevplatform/interfaces/idocument.h>
 
+#include <KTextEditor/Document>
 #include <KTextEditor/Range>
 
 #include "sourceinfoinlinenoteprovider.h"
@@ -41,32 +42,76 @@
 
 
 using namespace KDevelop;
+using namespace KTextEditor;
 
 
-SourceInfoInlineNoteProvider::SourceInfoInlineNoteProvider(QSharedPointer<SourceInfoConfig> config, IDocument* doc)
-    : m_doc(doc)
+SourceInfoInlineNoteProvider::SourceInfoInlineNoteProvider(QSharedPointer<SourceInfoConfig> config, Document* document)
+    : m_document(document)
     , m_config(config)
 {
     connect(m_config.data(), &SourceInfoConfig::changed, this, &SourceInfoInlineNoteProvider::configChanged);
 
     rebuildNotes();
 
+    connect(m_document, &KTextEditor::Document::viewCreated,
+            this, &SourceInfoInlineNoteProvider::registerToView);
+
+    for (auto view: m_document->views()) {
+        registerToView(m_document, view);
+    }
+
     // we want to rebuild notes whenever the current document has been reparsed
     connect(DUChain::self(), &DUChain::updateReady, this, &SourceInfoInlineNoteProvider::rebuildNotes);
 }
 
+void SourceInfoInlineNoteProvider::registerToView(KTextEditor::Document* /*document*/, KTextEditor::View* view)
+{
+    auto iface = qobject_cast<KTextEditor::InlineNoteInterface*>(view);
+    if (!iface) {
+        return;
+    }
+    iface->registerInlineNoteProvider(this);
+    Q_EMIT inlineNotesReset();
+}
+
 SourceInfoInlineNoteProvider::~SourceInfoInlineNoteProvider()
 {
+    for (auto view: m_document->views()) {
+        auto iface = qobject_cast<KTextEditor::InlineNoteInterface*>(view);
+        if (!iface) {
+            return;
+        }
+        iface->unregisterInlineNoteProvider(this);
+    }
+
     deleteNotes();
 }
 
-QVector<const KTextEditor::InlineNote *> SourceInfoInlineNoteProvider::inlineNotes(int line)
-{
-    if (m_notes.contains(line)) {
-        return m_notes[line];
-    } else {
-        return {};
+QVector<int> SourceInfoInlineNoteProvider::inlineNotes(int line) const {
+    auto iter = m_notes.lowerBound(Cursor(line, 0));
+
+    QVector<int> columns;
+    for (; iter != m_notes.end() && iter.key().line() == line; ++iter) {
+        columns.push_back(iter.key().column());
     }
+    return columns;
+}
+
+QSize SourceInfoInlineNoteProvider::inlineNoteSize(const InlineNote& note) const {
+    auto iter = m_notes.find(note.position());
+    Q_ASSERT (iter != m_notes.end());
+
+    return QSize(
+        (*iter)->width(note.lineHeight(), QFontMetricsF(note.font())),
+        note.lineHeight()
+    );
+}
+
+void SourceInfoInlineNoteProvider::paintInlineNote(const InlineNote& note, QPainter& painter) const {
+    auto iter = m_notes.find(note.position());
+    Q_ASSERT (iter != m_notes.end());
+
+    return (*iter)->paint(note.lineHeight(), QFontMetricsF(note.font()), note.font(), painter);
 }
 
 void SourceInfoInlineNoteProvider::configChanged()
@@ -76,10 +121,8 @@ void SourceInfoInlineNoteProvider::configChanged()
 
 void SourceInfoInlineNoteProvider::deleteNotes()
 {
-    for (auto &notesOnLine : m_notes) {
-        for (auto *note : notesOnLine) {
-            delete note;
-        }
+    for (auto &note : m_notes) {
+        delete note;
     }
     m_notes.clear();
 }
@@ -89,12 +132,12 @@ void SourceInfoInlineNoteProvider::rebuildNotes()
     deleteNotes();
 
     DUChainReadLocker lock;
-    TopDUContext* topContext = DUChainUtils::standardContextForUrl(m_doc->url());
+    TopDUContext* topContext = DUChainUtils::standardContextForUrl(m_document->url());
     if (topContext) {
         walkContext(topContext, topContext);
     }
 
-    emit reset();
+    emit inlineNotesReset();
 }
 
 void SourceInfoInlineNoteProvider::walkContext(KDevelop::DUContext* ctx, KDevelop::TopDUContext* top)
@@ -107,11 +150,11 @@ void SourceInfoInlineNoteProvider::walkContext(KDevelop::DUContext* ctx, KDevelo
                     const CursorInRevision &pos = declaration->range().end;
 
                     // XXX: Ugly and slow hack to figure out whether the enum value is set explicitly or not.
-                    QString followingText = m_doc->text(KTextEditor::Range(pos.line, pos.column, pos.line, pos.column + 100 /*xxx*/ ));
+                    QString followingText = m_document->text(KTextEditor::Range(pos.line, pos.column, pos.line, pos.column + 100 /*xxx*/ ));
                     if (followingText.trimmed().startsWith('=')) continue;
 
-                    KTextEditor::InlineNote *note = new GenericTextNote(pos.column, QString::fromUtf8(" = ") + enumerator->valueAsString(), Qt::gray, QBrush(), false, 0.0);
-                    m_notes[pos.line].push_back(note);
+                    InlineNoteBase *note = new GenericTextNote(pos.column, QString::fromUtf8(" = ") + enumerator->valueAsString(), Qt::gray, QBrush(), false, 0.0);
+                    m_notes.insert(pos.castToSimpleCursor(), note);
                 }
             }
         }
@@ -132,11 +175,13 @@ void SourceInfoInlineNoteProvider::walkContext(KDevelop::DUContext* ctx, KDevelo
 
             QString text = "= " + abstractType->toString();
 
-            KTextEditor::InlineNote *note = new GenericTextNote(pos.column, text, QColor(0x9090b0), QBrush(QColor(0xf5f5f5)), true, 4.0, 6.0);
-            m_notes[pos.line].push_back(note);
+            InlineNoteBase *note = new GenericTextNote(pos.column, text, QColor(0x9090b0), QBrush(QColor(0xf5f5f5)), true, 4.0, 6.0);
+            m_notes.insert(pos.castToSimpleCursor(), note);
         }
     }
 
+    // Disabled for now
+#if 0
     if (m_config->showStructFieldSize) {
         // Add member size and offset notes behind struct fields
         if (ctx->type() == DUContext::ContextType::Class) {
@@ -184,6 +229,7 @@ void SourceInfoInlineNoteProvider::walkContext(KDevelop::DUContext* ctx, KDevelo
             }
         }
     }
+#endif
 
     if (m_config->showFunctionArgumentNames || m_config->showFunctionArgumentDefaultValues) {
         // Display function parameter names on call sites
@@ -203,9 +249,9 @@ void SourceInfoInlineNoteProvider::walkContext(KDevelop::DUContext* ctx, KDevelo
                     CursorInRevision pos = use.m_range.end;
 
                     // XXX: Ugly, slow and incorrect hack to figure out where the parameters are
-                    QString followingText = m_doc->text(KTextEditor::Range(pos.line, pos.column, pos.line + 10 /* xxx */, pos.column + 500 /* xxx */ ));
+                    QString followingText = m_document->text(KTextEditor::Range(pos.line, pos.column, pos.line + 10 /* xxx */, pos.column + 500 /* xxx */ ));
                     int stackDepth = -1;
-                    int argumentIndex = 0;
+                    unsigned int argumentIndex = 0;
                     bool argumentPending = false;
 
                     auto decls = argumentContext->localDeclarations(top);
@@ -223,7 +269,7 @@ void SourceInfoInlineNoteProvider::walkContext(KDevelop::DUContext* ctx, KDevelo
                     for(;
                         char_i < followingText.length() &&
                         argumentIndex < function->indexedArgumentsSize() &&
-                        argumentIndex < decls.size();
+                        argumentIndex < (unsigned int) decls.size();
                         char_i++)
                     {
                         QChar c = followingText.at(char_i);
@@ -238,7 +284,7 @@ void SourceInfoInlineNoteProvider::walkContext(KDevelop::DUContext* ctx, KDevelo
                                     if (FunctionDeclaration* functionDeclaration = dynamic_cast<FunctionDeclaration*>(declaration)) {
                                         QString text;
 
-                                        for (; argumentIndex < function->indexedArgumentsSize() && argumentIndex < decls.size(); argumentIndex++) {
+                                        for (; argumentIndex < function->indexedArgumentsSize() && argumentIndex < (unsigned int) decls.size(); argumentIndex++) {
                                             text += ", ";
                                             if (m_config->showFunctionArgumentNames) {
                                                 auto indentifier = decls[argumentIndex]->identifier();
@@ -248,7 +294,7 @@ void SourceInfoInlineNoteProvider::walkContext(KDevelop::DUContext* ctx, KDevelo
                                         }
 
                                         GenericTextNote *note = new GenericTextNote(pos.column, text, QColor(0x9090b0), QBrush(QColor(0xf5f5f5)), true, 4.0);
-                                        m_notes[pos.line].push_back(note);
+                                        m_notes.insert(pos.castToSimpleCursor(), note);
                                     }
                                 }
                             }
@@ -262,7 +308,7 @@ void SourceInfoInlineNoteProvider::walkContext(KDevelop::DUContext* ctx, KDevelo
                                     QString text = identifier.toString() + ":";
                                     GenericTextNote *note = new GenericTextNote(pos.column, text, QColor(0x9090b0), QBrush(QColor(0xf5f5f5)), true, 4.0);
                                     note->setSpaceRight(true);
-                                    m_notes[pos.line].push_back(note);
+                                    m_notes.insert(pos.castToSimpleCursor(), note);
                                 }
                             }
                             argumentIndex++;
@@ -309,7 +355,7 @@ void SourceInfoInlineNoteProvider::walkContext(KDevelop::DUContext* ctx, KDevelo
                         const CursorInRevision &pos = argumentDeclaration->range().end;
                         QString text = " = " + identifier.str();
                         GenericTextNote *note = new GenericTextNote(pos.column, text, QColor(0x9090b0), QBrush(QColor(0xf5f5f5)), true, 4.0);
-                        m_notes[pos.line].push_back(note);
+                        m_notes.insert(pos.castToSimpleCursor(), note);
                     }
 
                     argumentIndex++;

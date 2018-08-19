@@ -27,8 +27,10 @@
 
 #include <KTextEditor/InlineNoteInterface>
 
+#include "inlinenotebase.h"
 
-class GenericTextNote : public KTextEditor::InlineNote
+
+class GenericTextNote : public InlineNoteBase
 {
     constexpr static qreal MARGIN = 1.0;
 

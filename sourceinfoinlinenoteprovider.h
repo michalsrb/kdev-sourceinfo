@@ -23,7 +23,11 @@
 #include <QMap>
 #include <QVector>
 
+#include <KTextEditor/Cursor>
 #include <KTextEditor/InlineNoteInterface>
+#include <KTextEditor/InlineNoteProvider>
+
+#include "notes/inlinenotebase.h"
 
 
 namespace KDevelop {
@@ -54,24 +58,28 @@ class SourceInfoInlineNoteProvider : public KTextEditor::InlineNoteProvider
     Q_OBJECT
 
 public:
-    SourceInfoInlineNoteProvider(QSharedPointer<SourceInfoConfig> config, KDevelop::IDocument* doc);
+    SourceInfoInlineNoteProvider(QSharedPointer<SourceInfoConfig> config, KTextEditor::Document* document);
     ~SourceInfoInlineNoteProvider();
 
-    QVector<const KTextEditor::InlineNote *> inlineNotes(int line) override;
+    QVector<int> inlineNotes(int line) const override;
+    QSize inlineNoteSize(const KTextEditor::InlineNote& note) const override;
+    void paintInlineNote(const KTextEditor::InlineNote& note, QPainter& painter) const override;
 
 private Q_SLOT:
     void configChanged();
 
 private:
+    void registerToView(KTextEditor::Document* /*document*/, KTextEditor::View* view);
+
     void deleteNotes();
     void rebuildNotes();
 
     void walkContext(KDevelop::DUContext* ctx, KDevelop::TopDUContext* top);
 
 private:
-    KDevelop::IDocument* m_doc;
+    KTextEditor::Document* m_document;
 
-    QMap<int, QVector<const KTextEditor::InlineNote *>> m_notes; // TODO: Differently?
+    QMap<KTextEditor::Cursor, const InlineNoteBase *> m_notes; // TODO: Differently?
 
     QSharedPointer<SourceInfoConfig> m_config;
 };

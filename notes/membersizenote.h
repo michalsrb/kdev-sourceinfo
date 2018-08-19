@@ -25,8 +25,10 @@
 
 #include <KTextEditor/InlineNoteInterface>
 
+#include "inlinenotebase.h"
 
-class MemberSizeNote : public KTextEditor::InlineNote
+
+class MemberSizeNote : public InlineNoteBase
 {
 private:
     static constexpr uint64_t MAX_SQUARES = 16;
